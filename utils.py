@@ -1,19 +1,19 @@
 import json
 import base64
-from config import VPS_IP, VMESS_PORT
+from config import VPS_IP, VMESS_PORT, BUG_HOST
 
 def generate_vmess_link(username, uuid):
-    """Generate VMess link from user data (WebSocket tunneling support)"""
+    """Generate VMess link from user data (WebSocket tunneling with bug host)"""
     vmess_config = {
         "v": "2",
         "ps": username,
-        "add": VPS_IP,
+        "add": BUG_HOST if BUG_HOST else VPS_IP,  # Bug host for tunneling
         "port": str(VMESS_PORT),
         "id": uuid,
         "aid": "0",
         "net": "ws",
         "type": "none",
-        "host": "",
+        "host": VPS_IP,  # Real VPS IP as Host header
         "path": "/vmess",
         "tls": "none",
         "sni": ""
