@@ -1,31 +1,51 @@
 import json
 import base64
-from config import VPS_IP, VMESS_PORT, BUG_HOST
+from config import VPS_IP, VMESS_PORT, BUG_HOST, ARGO_DOMAIN, USE_ARGO
 
-def generate_vmess_link(username, uuid):
-    """Generate VMess link from user data (WebSocket tunneling with bug host)"""
-    # Jika ada bug host, gunakan bug host di address dan VPS IP di host header
-    # Jika tidak ada bug host, langsung ke VPS IP
-    if BUG_HOST and BUG_HOST.strip():
+def generate_vmess_link(username, uuid, use_argo=None):
+    """Generate VMess link - supports Direct, Bug Host, and Argo Tunnel modes"""
+    
+    # Determine mode
+    if use_argo is None:
+        use_argo = USE_ARGO
+    
+    if use_argo and ARGO_DOMAIN:
+        # Argo Tunnel Mode
+        address = ARGO_DOMAIN
+        host_header = ARGO_DOMAIN
+        port = "443"  # Argo uses 443 with TLS
+        tls = "tls"
+        sni = ARGO_DOMAIN
+    elif BUG_HOST and BUG_HOST.strip():
+        # Bug Host Mode
         address = BUG_HOST
         host_header = VPS_IP
+        port = "80"
+        tls = ""
+        sni = ""
     else:
+        # Direct Mode
         address = VPS_IP
-        host_header = VPS_IP
+        host_header = ""
+        port = str(VMESS_PORT)
+        tls = ""
+        sni = ""
     
     vmess_config = {
         "v": "2",
-        "ps": username,
+        "ps": f"{username} ({'Argo' if use_argo and ARGO_DOMAIN else 'Direct'})",
         "add": address,
-        "port": str(VMESS_PORT),
+        "port": port,
         "id": uuid,
         "aid": "0",
+        "scy": "auto",
         "net": "ws",
         "type": "none",
         "host": host_header,
         "path": "/vmess",
-        "tls": "",
-        "sni": ""
+        "tls": tls,
+        "sni": sni,
+        "alpn": ""
     }
     
     # Convert to JSON and encode to base64
