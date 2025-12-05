@@ -6,6 +6,7 @@ from config import BOT_TOKEN, ADMIN_ID
 from database import add_user, get_user, delete_user, list_users, is_user_expired
 from xray_manager import generate_uuid, add_vmess_user, remove_vmess_user, get_vmess_users
 from utils import generate_vmess_link, format_user_info
+from monitor import get_active_connections, get_connection_count
 
 # Enable logging
 logging.basicConfig(
@@ -38,6 +39,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("➕ Create User", callback_data="create")],
         [InlineKeyboardButton("📋 List Users", callback_data="list")],
         [InlineKeyboardButton("🗑 Delete User", callback_data="delete")],
+        [InlineKeyboardButton("📊 Monitor", callback_data="monitor")],
         [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -50,6 +52,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/create - Create new VMess account\n"
         "/list - List all accounts\n"
         "/delete - Delete an account\n"
+        "/monitor - Show active connections\n"
         "/info <username> - Get account info\n"
         "/help - Show help"
     )
@@ -68,6 +71,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await list_users_command(update, context)
     elif query.data == "delete":
         await delete_start(update, context)
+    elif query.data == "monitor":
+        await monitor_command(update, context)
     elif query.data == "help":
         await help_command(update, context)
     elif query.data.startswith("days_"):
@@ -221,6 +226,43 @@ async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(response, parse_mode="Markdown")
 
 @admin_only
+async def monitor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show active connections monitor"""
+    try:
+        # Get connection count
+        conn_count = get_connection_count()
+        
+        # Get active connections
+        connections = get_active_connections()
+        
+        if conn_count == 0 and not connections:
+            text = "📊 *Connection Monitor*\n\n🔴 No active connections"
+        else:
+            text = f"📊 *Connection Monitor*\n\n"
+            text += f"🟢 *Active Connections: {conn_count}*\n\n"
+            
+            if connections:
+                text += "*Connection Details:*\n"
+                for i, conn in enumerate(connections, 1):
+                    if 'user' in conn:
+                        text += f"{i}. User: `{conn['user']}`\n"
+                        text += f"   ⬆️ Up: {conn['upload']} | ⬇️ Down: {conn['download']}\n"
+                        text += f"   📊 Total: {conn['total']}\n\n"
+                    elif 'ip' in conn:
+                        text += f"{i}. IP: `{conn['ip']}` - {conn['status']}\n\n"
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, parse_mode="Markdown")
+        else:
+            await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception as e:
+        error_text = f"❌ Error getting monitor data: {str(e)}"
+        if update.callback_query:
+            await update.callback_query.edit_message_text(error_text)
+        else:
+            await update.message.reply_text(error_text)
+
+@admin_only
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show help message"""
     help_text = (
@@ -230,6 +272,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/create - Create new VMess account\n"
         "/list - List all VMess accounts\n"
         "/delete - Delete a VMess account\n"
+        "/monitor - Monitor active connections\n"
         "/info <username> - Get account info and link\n"
         "/help - Show this help message\n\n"
         "*How to use:*\n"
@@ -265,6 +308,7 @@ def main():
     application.add_handler(CommandHandler("create", create_start))
     application.add_handler(delete_conv_handler)
     application.add_handler(CommandHandler("list", list_users_command))
+    application.add_handler(CommandHandler("monitor", monitor_command))
     application.add_handler(CommandHandler("info", info_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(button_handler))
