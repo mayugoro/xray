@@ -19,7 +19,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Conversation states
-EMAIL, DAYS = range(2)
+DELETE_EMAIL = range(1)
 
 def admin_only(func):
     """Decorator to restrict commands to admin only"""
@@ -50,7 +50,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/create - Create new VMess account\n"
         "/list - List all accounts\n"
         "/delete - Delete an account\n"
-        "/info <email> - Get account info\n"
+        "/info <username> - Get account info\n"
         "/help - Show help"
     )
     
@@ -63,74 +63,60 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     if query.data == "create":
-        await query.edit_message_text("Please send the email for the new user:")
-        return EMAIL
+        await create_start(update, context)
     elif query.data == "list":
         await list_users_command(update, context)
     elif query.data == "delete":
-        await query.edit_message_text("Please send the email of the user to delete:")
-        return EMAIL
+        await delete_start(update, context)
     elif query.data == "help":
         await help_command(update, context)
+    elif query.data.startswith("days_"):
+        await create_user_with_days(update, context)
 
 @admin_only
 async def create_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start create user conversation"""
-    await update.message.reply_text(
-        "📧 Please send the email for the new VMess user:\n"
-        "(Example: user@example.com)\n\n"
-        "Send /cancel to abort."
-    )
-    return EMAIL
+    """Start create user - show duration buttons"""
+    keyboard = [
+        [InlineKeyboardButton("1 Day", callback_data="days_1"),
+         InlineKeyboardButton("3 Days", callback_data="days_3")],
+        [InlineKeyboardButton("7 Days", callback_data="days_7"),
+         InlineKeyboardButton("30 Days", callback_data="days_30")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    message_text = "⏳ *Select Account Duration:*\n\nChoose how long this VMess account should be valid:"
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(message_text, reply_markup=reply_markup, parse_mode="Markdown")
+    else:
+        await update.message.reply_text(message_text, reply_markup=reply_markup, parse_mode="Markdown")
 
-async def create_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Receive email and ask for days"""
-    email = update.message.text.strip()
+async def create_user_with_days(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Create user with selected days"""
+    query = update.callback_query
+    await query.answer()
     
-    # Validate email format (basic)
-    if '@' not in email or ' ' in email:
-        await update.message.reply_text("❌ Invalid email format. Please send a valid email:")
-        return EMAIL
+    # Extract days from callback data
+    days = int(query.data.split('_')[1])
     
-    # Check if user already exists
-    if get_user(email):
-        await update.message.reply_text("❌ User already exists! Please use a different email:")
-        return EMAIL
-    
-    context.user_data['email'] = email
-    await update.message.reply_text(
-        "⏳ How many days should this account be valid?\n"
-        "(Example: 30)\n\n"
-        "Send /cancel to abort."
-    )
-    return DAYS
-
-async def create_days(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Receive days and create user"""
-    try:
-        days = int(update.message.text.strip())
-        if days <= 0:
-            raise ValueError
-    except ValueError:
-        await update.message.reply_text("❌ Invalid number. Please send a positive number:")
-        return DAYS
-    
-    email = context.user_data['email']
+    # Generate username (vmess_timestamp)
+    import time
+    username = f"vmess_{int(time.time())}"
     
     # Generate UUID
     uuid = generate_uuid()
     
     # Add to XRay
-    success, message = add_vmess_user(email, uuid)
+    success, message = add_vmess_user(username, uuid)
     if not success:
-        await update.message.reply_text(f"❌ Failed to add user to XRay: {message}")
-        return ConversationHandler.END
+        await query.edit_message_text(f"❌ Failed to add user to XRay: {message}")
+        return
     
     # Add to database
-    user = add_user(email, uuid, days)
+    user = add_user(username, uuid, days)
     
     # Generate VMess link
-    vmess_link = generate_vmess_link(email, uuid)
+    vmess_link = generate_vmess_link(username, uuid)
     
     # Format response
     response = (
@@ -140,11 +126,7 @@ async def create_days(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Copy the link above and import it to your V2Ray client."
     )
     
-    await update.message.reply_text(response, parse_mode="Markdown")
-    
-    # Clear user data
-    context.user_data.clear()
-    return ConversationHandler.END
+    await query.edit_message_text(response, parse_mode="Markdown")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel conversation"""
@@ -161,10 +143,10 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         text = "📋 No users found."
     else:
         text = f"📋 *Total Users: {len(users)}*\n\n"
-        for email, user in users.items():
-            expired = is_user_expired(email)
+        for username, user in users.items():
+            expired = is_user_expired(username)
             status = "❌ Expired" if expired else "✅ Active"
-            text += f"• {email} - {status}\n"
+            text += f"• `{username}` - {status}\n"
             text += f"  Expires: {user['expiry_date']}\n\n"
     
     if update.callback_query:
@@ -175,53 +157,58 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 @admin_only
 async def delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start delete user conversation"""
-    await update.message.reply_text(
-        "🗑 Please send the email of the user to delete:\n\n"
+    message_text = (
+        "🗑 Please send the username of the user to delete:\n\n"
         "Send /cancel to abort."
     )
-    return EMAIL
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(message_text)
+    else:
+        await update.message.reply_text(message_text)
+    return DELETE_EMAIL
 
-async def delete_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Receive email and delete user"""
-    email = update.message.text.strip()
+async def delete_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive username and delete user"""
+    username = update.message.text.strip()
     
     # Check if user exists
-    user = get_user(email)
+    user = get_user(username)
     if not user:
         await update.message.reply_text("❌ User not found!")
         return ConversationHandler.END
     
     # Remove from XRay
-    success, message = remove_vmess_user(email)
+    success, message = remove_vmess_user(username)
     if not success:
         await update.message.reply_text(f"❌ Failed to remove from XRay: {message}")
         return ConversationHandler.END
     
     # Remove from database
-    delete_user(email)
+    delete_user(username)
     
-    await update.message.reply_text(f"✅ User `{email}` has been deleted successfully!", parse_mode="Markdown")
+    await update.message.reply_text(f"✅ User `{username}` has been deleted successfully!", parse_mode="Markdown")
     return ConversationHandler.END
 
 @admin_only
 async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get user info"""
     if not context.args:
-        await update.message.reply_text("Usage: /info <email>")
+        await update.message.reply_text("Usage: /info <username>")
         return
     
-    email = context.args[0]
-    user = get_user(email)
+    username = context.args[0]
+    user = get_user(username)
     
     if not user:
         await update.message.reply_text("❌ User not found!")
         return
     
     # Generate VMess link
-    vmess_link = generate_vmess_link(email, user['uuid'])
+    vmess_link = generate_vmess_link(username, user['uuid'])
     
     # Check expiry
-    expired = is_user_expired(email)
+    expired = is_user_expired(username)
     status = "❌ Expired" if expired else "✅ Active"
     
     response = (
@@ -243,15 +230,15 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/create - Create new VMess account\n"
         "/list - List all VMess accounts\n"
         "/delete - Delete a VMess account\n"
-        "/info <email> - Get account info and link\n"
+        "/info <username> - Get account info and link\n"
         "/help - Show this help message\n\n"
         "*How to use:*\n"
         "1. Use /create to create a new account\n"
-        "2. Enter email and validity period\n"
+        "2. Select validity period (1/3/7/30 days)\n"
         "3. Copy the VMess link and import to your client\n"
         "4. Use /list to see all accounts\n"
         "5. Use /delete to remove accounts\n\n"
-        "*Note:* VMess links use your VPS IP address directly."
+        "*Note:* VMess links use your VPS IP address directly (non-TLS)."
     )
     
     if update.callback_query:
@@ -264,27 +251,18 @@ def main():
     # Create application
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Create conversation handler
-    create_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("create", create_start)],
-        states={
-            EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_email)],
-            DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_days)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-    )
-    
+    # Create conversation handler for delete only
     delete_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("delete", delete_start)],
         states={
-            EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, delete_email)],
+            DELETE_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, delete_username)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     
     # Add handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(create_conv_handler)
+    application.add_handler(CommandHandler("create", create_start))
     application.add_handler(delete_conv_handler)
     application.add_handler(CommandHandler("list", list_users_command))
     application.add_handler(CommandHandler("info", info_command))

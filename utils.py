@@ -2,11 +2,11 @@ import json
 import base64
 from config import VPS_IP, VMESS_PORT
 
-def generate_vmess_link(email, uuid):
-    """Generate VMess link from user data"""
+def generate_vmess_link(username, uuid):
+    """Generate VMess link from user data (non-TLS)"""
     vmess_config = {
         "v": "2",
-        "ps": email,
+        "ps": username,
         "add": VPS_IP,
         "port": str(VMESS_PORT),
         "id": uuid,
@@ -15,7 +15,7 @@ def generate_vmess_link(email, uuid):
         "type": "none",
         "host": "",
         "path": "",
-        "tls": "",
+        "tls": "none",
         "sni": ""
     }
     
@@ -39,7 +39,7 @@ def decode_vmess_link(vmess_link):
 
 def format_user_info(user, uuid):
     """Format user information for display"""
-    info = f"📧 Email: `{user['email']}`\n"
+    info = f"👤 Username: `{user['username']}`\n"
     info += f"🆔 UUID: `{uuid}`\n"
     info += f"📅 Created: {user['created_at']}\n"
     info += f"⏰ Expires: {user['expiry_date']}\n"

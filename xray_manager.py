@@ -44,7 +44,7 @@ def restart_xray():
     except subprocess.CalledProcessError:
         return False
 
-def add_vmess_user(email, uuid):
+def add_vmess_user(username, uuid):
     """Add VMess user to XRay config"""
     config = read_xray_config()
     
@@ -53,13 +53,13 @@ def add_vmess_user(email, uuid):
         if inbound.get('protocol') == 'vmess':
             # Check if user already exists
             clients = inbound['settings'].get('clients', [])
-            if any(client['email'] == email for client in clients):
+            if any(client['email'] == username for client in clients):
                 return False, "User already exists"
             
             # Add new client
             clients.append({
                 "id": uuid,
-                "email": email,
+                "email": username,
                 "alterId": 0
             })
             inbound['settings']['clients'] = clients
@@ -70,7 +70,7 @@ def add_vmess_user(email, uuid):
     
     return False, "VMess inbound not found"
 
-def remove_vmess_user(email):
+def remove_vmess_user(username):
     """Remove VMess user from XRay config"""
     config = read_xray_config()
     
@@ -80,7 +80,7 @@ def remove_vmess_user(email):
             original_count = len(clients)
             
             # Remove user
-            clients = [c for c in clients if c['email'] != email]
+            clients = [c for c in clients if c['email'] != username]
             
             if len(clients) < original_count:
                 inbound['settings']['clients'] = clients
