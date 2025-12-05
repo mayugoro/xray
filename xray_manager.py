@@ -53,13 +53,12 @@ def add_vmess_user(username, uuid):
         if inbound.get('protocol') == 'vmess':
             # Check if user already exists
             clients = inbound['settings'].get('clients', [])
-            if any(client['email'] == username for client in clients):
+            if any(client.get('id') == uuid for client in clients):
                 return False, "User already exists"
             
-            # Add new client
+            # Add new client (no email field needed)
             clients.append({
                 "id": uuid,
-                "email": username,
                 "alterId": 0
             })
             inbound['settings']['clients'] = clients
@@ -71,7 +70,14 @@ def add_vmess_user(username, uuid):
     return False, "VMess inbound not found"
 
 def remove_vmess_user(username):
-    """Remove VMess user from XRay config"""
+    """Remove VMess user from XRay config by UUID"""
+    # Get user's UUID from database
+    from database import get_user
+    user = get_user(username)
+    if not user:
+        return False, "User not found in database"
+    
+    uuid = user['uuid']
     config = read_xray_config()
     
     for inbound in config['inbounds']:
@@ -79,8 +85,8 @@ def remove_vmess_user(username):
             clients = inbound['settings'].get('clients', [])
             original_count = len(clients)
             
-            # Remove user
-            clients = [c for c in clients if c['email'] != username]
+            # Remove user by UUID
+            clients = [c for c in clients if c.get('id') != uuid]
             
             if len(clients) < original_count:
                 inbound['settings']['clients'] = clients
@@ -88,7 +94,7 @@ def remove_vmess_user(username):
                 restart_xray()
                 return True, "User removed successfully"
             else:
-                return False, "User not found"
+                return False, "User not found in XRay config"
     
     return False, "VMess inbound not found"
 
