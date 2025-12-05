@@ -4,18 +4,27 @@ from config import VPS_IP, VMESS_PORT, BUG_HOST
 
 def generate_vmess_link(username, uuid):
     """Generate VMess link from user data (WebSocket tunneling with bug host)"""
+    # Jika ada bug host, gunakan bug host di address dan VPS IP di host header
+    # Jika tidak ada bug host, langsung ke VPS IP
+    if BUG_HOST and BUG_HOST.strip():
+        address = BUG_HOST
+        host_header = VPS_IP
+    else:
+        address = VPS_IP
+        host_header = VPS_IP
+    
     vmess_config = {
         "v": "2",
         "ps": username,
-        "add": BUG_HOST if BUG_HOST else VPS_IP,  # Bug host for tunneling
+        "add": address,
         "port": str(VMESS_PORT),
         "id": uuid,
         "aid": "0",
         "net": "ws",
         "type": "none",
-        "host": VPS_IP,  # Real VPS IP as Host header
+        "host": host_header,
         "path": "/vmess",
-        "tls": "none",
+        "tls": "",
         "sni": ""
     }
     

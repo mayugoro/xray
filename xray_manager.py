@@ -17,15 +17,16 @@ def read_xray_config():
         return {
             "inbounds": [{
                 "port": 443,
+                "listen": "0.0.0.0",
                 "protocol": "vmess",
                 "settings": {
                     "clients": []
                 },
                 "streamSettings": {
                     "network": "ws",
-                    "security": "none",
                     "wsSettings": {
-                        "path": "/vmess"
+                        "path": "/vmess",
+                        "headers": {}
                     }
                 }
             }],
