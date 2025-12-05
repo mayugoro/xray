@@ -3,7 +3,7 @@ import base64
 from config import VPS_IP, VMESS_PORT
 
 def generate_vmess_link(username, uuid):
-    """Generate VMess link from user data (non-TLS)"""
+    """Generate VMess link from user data (WebSocket tunneling support)"""
     vmess_config = {
         "v": "2",
         "ps": username,
@@ -11,10 +11,10 @@ def generate_vmess_link(username, uuid):
         "port": str(VMESS_PORT),
         "id": uuid,
         "aid": "0",
-        "net": "tcp",
+        "net": "ws",
         "type": "none",
         "host": "",
-        "path": "",
+        "path": "/vmess",
         "tls": "none",
         "sni": ""
     }

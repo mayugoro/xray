@@ -22,8 +22,11 @@ def read_xray_config():
                     "clients": []
                 },
                 "streamSettings": {
-                    "network": "tcp",
-                    "security": "none"
+                    "network": "ws",
+                    "security": "none",
+                    "wsSettings": {
+                        "path": "/vmess"
+                    }
                 }
             }],
             "outbounds": [{
