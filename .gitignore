@@ -1,6 +1,3 @@
-# Ignore environment variables
-.env
-
 # Ignore database
 users.json
 
